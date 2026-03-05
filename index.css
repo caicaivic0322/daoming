@@ -759,11 +759,50 @@ textarea {
   border-radius: 50%;
   border: 3px solid var(--color-gold);
   position: relative;
+  transition: all var(--transition-normal);
+}
+
+.score-circle.level-v-good {
+  border-color: var(--color-gold);
+  background: rgba(197, 165, 90, 0.05);
+  box-shadow: 0 0 20px rgba(197, 165, 90, 0.3);
+}
+
+.score-circle.level-good {
+  border-color: var(--color-gold-light);
+}
+
+.score-circle.level-bad {
+  border-color: var(--color-ink-muted);
+  opacity: 0.8;
+}
+
+.score-circle.level-v-bad {
+  border-color: var(--color-vermilion);
+  background: rgba(139, 37, 0, 0.03);
+  box-shadow: 0 0 15px rgba(139, 37, 0, 0.15);
+}
+
+.score-circle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 20px var(--color-shadow-deep);
 }
 
 .score-number {
   font-family: var(--font-heading);
-  font-size: 2.5rem;
+  font-size: 2.2rem;
+  color: var(--color-vermilion);
+}
+
+.score-circle.level-v-good .score-number {
+  color: var(--color-vermilion);
+}
+
+.score-circle.level-bad .score-number {
+  color: var(--color-ink-light);
+}
+
+.score-circle.level-v-bad .score-number {
   color: var(--color-vermilion);
 }
 

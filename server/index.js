@@ -33,6 +33,26 @@ app.post('/api/analyze-name', async (req, res) => {
       return res.status(400).json({ error: '请提供姓名和属相' });
     }
 
+    // --- Demo Mode for Local Testing ---
+    if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY === 'your_key_here') {
+      console.log('Using Demo Mode (No API Key detected)');
+      // Random score to test different fortune levels
+      const mockScore = Math.floor(60 + Math.random() * 40); 
+      return res.json({
+        score: mockScore,
+        summary: `「演示模式」：${name} 先生/女士，此名与属${zodiac}契合度极高，乃祥瑞之象。`,
+        analysis: [
+          { icon: '📝', title: '字形分析', content: '此名字形平衡，结构稳健，寓意一生平稳顺遂。' },
+          { icon: '📖', title: '字义解读', content: '名字中蕴含着深厚的文化底蕴，展现了高雅的情操与远大的抱负。' },
+          { icon: '🔥', title: '五行属性', content: '五行相生相旺，能够有效补足命理所需的能量缺口。' },
+          { icon: '🐲', title: '属相相合', content: `与属相「${zodiac}」高度契合，能得生肖守护，万事如意。` },
+          { icon: '☯', title: '八卦方位', content: '占据九宫吉位，有助于事业开阔，家门兴旺。' },
+          { icon: '⭐', title: '星象命理', content: '星宿拱卫，命宫清明，预示着未来有着不可限量的发展潜力。' }
+        ]
+      });
+    }
+    // ----------------------------------
+
     const prompt = buildAnalysisPrompt(name, zodiac);
 
     const response = await fetch(DEEPSEEK_API_URL, {

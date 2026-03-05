@@ -125,10 +125,18 @@ async function analyzeName(name, zodiac) {
         <p style="font-size:0.8rem; color:var(--color-ink-muted); margin-top:1rem;">${error.message}</p>
       </div>
     `;
+    alert('推演过程中出现异常，请稍后再试');
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = '开 始 测 名';
   }
+}
+
+function getScoreInfo(score) {
+  if (score >= 90) return { label: '大吉', class: 'level-v-good' };
+  if (score >= 80) return { label: '吉', class: 'level-good' };
+  if (score >= 65) return { label: '凶', class: 'level-bad' };
+  return { label: '大凶', class: 'level-v-bad' };
 }
 
 function renderResults(name, zodiac, data) {
@@ -137,6 +145,7 @@ function renderResults(name, zodiac, data) {
   const score = data.score || 75;
   const summary = data.summary || '';
   const suggestions = data.suggestions || [];
+  const scoreInfo = getScoreInfo(score);
 
   // Determine how many items to show for free
   const freeItemCount = 2;
@@ -149,10 +158,10 @@ function renderResults(name, zodiac, data) {
 
       <!-- Score -->
       <div class="score-display">
-        <div class="score-circle">
-          <span class="score-number">${score}</span>
+        <div class="score-circle ${scoreInfo.class}">
+          <span class="score-number">${scoreInfo.label}</span>
         </div>
-        <div class="score-label">综合命理评分</div>
+        <div class="score-label">命理评定</div>
       </div>
 
       ${summary ? `<p style="font-family:var(--font-serif); color:var(--color-ink-light); line-height:2; font-size:0.9rem;">${summary}</p>` : ''}
