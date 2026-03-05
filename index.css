@@ -971,9 +971,11 @@ textarea {
 
 .loading-spinner {
   display: inline-block;
-  font-size: 3rem;
+  font-size: 9rem;
   animation: gentle-spin 3s linear infinite;
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-xl);
+  color: var(--color-ink);
+  opacity: 0.8;
 }
 
 .loading-text {

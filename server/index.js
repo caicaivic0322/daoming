@@ -14,6 +14,10 @@ const PORT = process.env.PORT || 3001;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
+// IP-based request tracking
+const requestCounts = new Map();
+const FREE_LIMIT = 2;
+
 app.use(cors());
 app.use(express.json());
 
@@ -28,6 +32,16 @@ app.use(express.static(join(__dirname, '..', 'dist')));
 app.post('/api/analyze-name', async (req, res) => {
   try {
     const { name, zodiac } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // Check request limit
+    const count = requestCounts.get(ip) || 0;
+    if (count >= FREE_LIMIT) {
+      return res.status(402).json({ 
+        error: '免费测名次数已达上限', 
+        limitExceeded: true 
+      });
+    }
 
     if (!name || !zodiac) {
       return res.status(400).json({ error: '请提供姓名和属相' });
@@ -117,6 +131,10 @@ score 为 0-100 的整数，表示姓名与属相的综合契合度。
 
     // Parse JSON from response
     const result = parseJsonResponse(content);
+    
+    // Increment count on success
+    requestCounts.set(ip, count + 1);
+    
     res.json(result);
   } catch (error) {
     console.error('Server error:', error);

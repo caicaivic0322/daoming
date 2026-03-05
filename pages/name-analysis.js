@@ -55,6 +55,42 @@ export function renderNameAnalysis(container) {
   initFormHandlers();
 }
 
+/**
+ * 显示次数上限提示
+ */
+function showLimitExceeded(container) {
+  container.innerHTML = `
+    <div class="paywall-banner fade-in" style="margin-top:0;">
+      <div style="font-size:3rem; margin-bottom:var(--space-md);">☯</div>
+      <h3>免费测算次数已用完</h3>
+      <p>
+        每个设备限两次免费测算。您已体验过道家命理推演的玄妙，<br>
+        如需继续深度解读，请支持我们的传承工作。
+      </p>
+      <div class="paywall-price">
+        ¥ 39.9 <small>/ 永久解锁</small>
+      </div>
+      <button class="btn-gold" id="limit-pay-btn">
+        立即解锁 ✦
+      </button>
+      <p style="margin-top:var(--space-md); font-size:0.8rem; color:var(--color-ink-muted);">
+        * 演示模式：点击解锁后即可再次尝试
+      </p>
+    </div>
+  `;
+
+  document.getElementById('limit-pay-btn').addEventListener('click', () => {
+    isPaid = true;
+    alert('已成功模拟付费解锁！');
+    // Hide results area so user can submit again
+    const rs = document.getElementById('results-area');
+    rs.style.display = 'none';
+    
+    // Smooth scroll back to form
+    document.getElementById('name-form').scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
 function initFormHandlers() {
   // Zodiac selection
   const grid = document.getElementById('zodiac-grid');
@@ -115,6 +151,10 @@ async function analyzeName(name, zodiac) {
     }
 
     const data = await response.json();
+    if (data.limitExceeded) {
+       showLimitExceeded(resultsArea);
+       return;
+    }
     renderResults(name, zodiac, data);
   } catch (error) {
     console.error('Analysis error:', error);
