@@ -17,6 +17,7 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 // IP-based request tracking
 const requestCounts = new Map();
 const FREE_LIMIT = 2;
+const paidIPs = new Set();
 
 app.use(cors());
 app.use(express.json());
@@ -35,8 +36,10 @@ app.post('/api/analyze-name', async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     // Check request limit
+    const isIPPaid = paidIPs.has(ip);
     const count = requestCounts.get(ip) || 0;
-    if (count >= FREE_LIMIT) {
+    
+    if (!isIPPaid && count >= FREE_LIMIT) {
       return res.status(402).json({ 
         error: '免费测名次数已达上限', 
         limitExceeded: true 
@@ -132,8 +135,13 @@ score 为 0-100 的整数，表示姓名与属相的综合契合度。
     // Parse JSON from response
     const result = parseJsonResponse(content);
     
-    // Increment count on success
-    requestCounts.set(ip, count + 1);
+    // Tag the result with paid status
+    result.isPaid = isIPPaid;
+
+    // Increment count only for non-paid requests
+    if (!isIPPaid) {
+      requestCounts.set(ip, count + 1);
+    }
     
     res.json(result);
   } catch (error) {
@@ -214,6 +222,16 @@ app.post('/api/suggest-names', async (req, res) => {
     console.error('Server error:', error);
     res.status(500).json({ error: '服务器内部错误' });
   }
+});
+
+/**
+ * POST /api/unlock
+ * Unlock the limit for the current IP (Simulated Payment)
+ */
+app.post('/api/unlock', (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  paidIPs.add(ip);
+  res.json({ success: true, message: '已成功解锁该 IP 的永久访问权限' });
 });
 
 /**

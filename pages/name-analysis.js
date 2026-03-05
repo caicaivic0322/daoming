@@ -79,15 +79,29 @@ function showLimitExceeded(container) {
     </div>
   `;
 
-  document.getElementById('limit-pay-btn').addEventListener('click', () => {
-    isPaid = true;
-    alert('已成功模拟付费解锁！');
-    // Hide results area so user can submit again
-    const rs = document.getElementById('results-area');
-    rs.style.display = 'none';
+  document.getElementById('limit-pay-btn').addEventListener('click', async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = '正在支付...';
     
-    // Smooth scroll back to form
-    document.getElementById('name-form').scrollIntoView({ behavior: 'smooth' });
+    try {
+      // Notify server about payment
+      await fetch('/api/unlock', { method: 'POST' });
+      
+      isPaid = true;
+      alert('已成功模拟付费解锁！');
+      // Hide results area so user can submit again
+      const rs = document.getElementById('results-area');
+      rs.style.display = 'none';
+      
+      // Smooth scroll back to form
+      document.getElementById('name-form').scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+      alert('支付连接失败，请稍后重试');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '立即解锁 ✦';
+    }
   });
 }
 
@@ -146,15 +160,18 @@ async function analyzeName(name, zodiac) {
       body: JSON.stringify({ name, zodiac: zodiac.name }),
     });
 
+    if (response.status === 402) {
+       showLimitExceeded(resultsArea);
+       return;
+    }
+
     if (!response.ok) {
       throw new Error(`API 请求失败: ${response.status}`);
     }
 
     const data = await response.json();
-    if (data.limitExceeded) {
-       showLimitExceeded(resultsArea);
-       return;
-    }
+    if (data.isPaid) isPaid = true;
+
     renderResults(name, zodiac, data);
   } catch (error) {
     console.error('Analysis error:', error);
@@ -288,10 +305,16 @@ function renderResults(name, zodiac, data) {
   // Bind pay button
   const payBtn = document.getElementById('pay-btn');
   if (payBtn) {
-    payBtn.addEventListener('click', () => {
-      isPaid = true;
-      // Reload with suggestions
-      fetchSuggestionsAndRerender(name, zodiac, analysisItems, score, summary);
+    payBtn.addEventListener('click', async () => {
+      // Notify server about payment
+      try {
+        await fetch('/api/unlock', { method: 'POST' });
+        isPaid = true;
+        // Reload with suggestions
+        fetchSuggestionsAndRerender(name, zodiac, analysisItems, score, summary);
+      } catch (err) {
+        alert('支付连接失败，请稍后重试');
+      }
     });
   }
 
