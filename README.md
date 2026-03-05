@@ -74,6 +74,19 @@ npm run server
 
 访问 [http://localhost:3000](http://localhost:3000) 即可使用。
 
+## 🌐 部署到 Render.com
+
+该项目由于包含 Express 后端，需要在 Render 上作为 **Web Service** 部署：
+
+1. **关联 GitHub**：连接你的 `daoming` 仓库。
+2. **选择服务类型**：选择 **Web Service**。
+3. **构建设置**：
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+4. **环境变量 (Environment Variables)**：
+   - `DEEPSEEK_API_KEY`: 填入你的 DeepSeek API Key
+   - `PORT`: 默认为 10000（Render 会自动分配，代码已适配）
+
 ---
 
 ## 🏗️ 技术栈

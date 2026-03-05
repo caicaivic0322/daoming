@@ -1,21 +1,25 @@
-/**
- * 道名 — Express Backend Server
- * Proxies DeepSeek API calls to protect API key
- */
-
 import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 config(); // Load .env
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from Vite build output (production)
+app.use(express.static(join(__dirname, '..', 'dist')));
+
 
 /**
  * POST /api/analyze-name
@@ -257,6 +261,11 @@ function parseJsonResponse(content) {
   }
 }
 
+// SPA catch-all: serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, '..', 'dist', 'index.html'));
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🏛️ 道名后端服务已启动: http://localhost:${PORT}`);
@@ -264,3 +273,4 @@ app.listen(PORT, () => {
     console.warn('⚠️  请在 .env 文件中设置 DEEPSEEK_API_KEY');
   }
 });
+
