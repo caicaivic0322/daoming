@@ -1272,3 +1272,60 @@ body,
   50% { opacity: 0.6; }
 }
 
+/* Tries Badge */
+.tries-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--color-paper-light);
+  border: 1px solid var(--color-cloud);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  font-family: var(--font-serif);
+  margin-bottom: var(--space-md);
+  letter-spacing: 0.1em;
+}
+
+.tries-badge-limit {
+  color: var(--color-vermilion);
+  border-color: var(--color-vermilion);
+  background: rgba(139, 37, 0, 0.05);
+}
+
+/* QR Code Paywall */
+.qr-container {
+  background: #fff;
+  padding: var(--space-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  display: inline-block;
+  margin: var(--space-lg) 0;
+}
+
+.qr-image {
+  width: 240px;
+  height: auto;
+  border: 1px solid #eee;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-md);
+}
+
+.qr-price-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  background: #07c160;
+  color: #fff;
+  border-radius: 30px;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  margin-bottom: var(--space-md);
+}
+
+.qr-tips {
+  font-size: 0.85rem;
+  color: var(--color-ink-muted);
+  font-family: var(--font-serif);
+  line-height: 1.6;
+}
+
+

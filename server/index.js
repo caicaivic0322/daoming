@@ -3,6 +3,9 @@ import cors from 'cors';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
+
+import { mockResponses } from './mock-responses.js';
 
 config(); // Load .env
 
@@ -14,13 +17,63 @@ const PORT = process.env.PORT || 3001;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
-// IP-based request tracking
-const requestCounts = new Map();
-const FREE_LIMIT = 2;
-const paidIPs = new Set();
+// --- Persistent Storage ---
+const DB_FILE = join(__dirname, 'db.json');
+let dbData = { 
+  requestCounts: {}, 
+  paidIPs: [],
+  dailyGlobalCount: 0,
+  lastResetDate: new Date().toISOString().split('T')[0]
+};
 
+function getTodayKey() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function loadDB() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      dbData = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      // Ensure defaults
+      dbData.requestCounts = dbData.requestCounts || {};
+      dbData.paidIPs = dbData.paidIPs || [];
+      dbData.dailyGlobalCount = dbData.dailyGlobalCount || 0;
+      dbData.lastResetDate = dbData.lastResetDate || getTodayKey();
+
+      // Reset global count if date changed
+      if (dbData.lastResetDate !== getTodayKey()) {
+        dbData.dailyGlobalCount = 0;
+        dbData.lastResetDate = getTodayKey();
+        saveDB();
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load DB:', e);
+  }
+}
+
+function saveDB() {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(dbData, null, 2));
+  } catch (e) {
+    console.error('Failed to save DB:', e);
+  }
+}
+
+// Initial load
+loadDB();
+
+const FREE_LIMIT = 2;
+const GLOBAL_DAILY_LIMIT = 20;
+
+app.set('trust proxy', true); // Trust the first proxy (e.g., Render, Nginx)
 app.use(cors());
 app.use(express.json());
+
+// Helper to get client IP
+function getClientIp(req) {
+  return req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+}
 
 // Serve static files from Vite build output (production)
 app.use(express.static(join(__dirname, '..', 'dist')));
@@ -33,117 +86,75 @@ app.use(express.static(join(__dirname, '..', 'dist')));
 app.post('/api/analyze-name', async (req, res) => {
   try {
     const { name, zodiac } = req.body;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = getClientIp(req);
+
+    // Refresh DB check for date reset
+    if (dbData.lastResetDate !== getTodayKey()) {
+      dbData.dailyGlobalCount = 0;
+      dbData.lastResetDate = getTodayKey();
+      saveDB();
+    }
 
     // Check request limit
-    const isIPPaid = paidIPs.has(ip);
-    const count = requestCounts.get(ip) || 0;
+    const isIPPaid = dbData.paidIPs.includes(ip);
+    const count = dbData.requestCounts[ip] || 0;
     
+    // 1. Check IP limit first (only for non-paid)
     if (!isIPPaid && count >= FREE_LIMIT) {
       return res.status(402).json({ 
         error: '免费测名次数已达上限', 
-        limitExceeded: true 
+        limitExceeded: true,
+        remainingTries: 0
+      });
+    }
+
+    // 2. Check Global Daily limit (only for non-paid)
+    if (!isIPPaid && dbData.dailyGlobalCount >= GLOBAL_DAILY_LIMIT) {
+      return res.status(402).json({
+        error: '今日全站免费名额已用完',
+        globalLimitExceeded: true,
+        remainingTries: 0
       });
     }
 
     if (!name || !zodiac) {
-      return res.status(400).json({ error: '请提供姓名和属相' });
+      return res.status(400).json({ error: '请提供姓名 and 属相' });
     }
 
-    // --- Demo Mode for Local Testing ---
-    if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY === 'your_key_here') {
-      console.log('Using Demo Mode (No API Key detected)');
-      // Random score to test different fortune levels
-      const mockScore = Math.floor(60 + Math.random() * 40); 
-      return res.json({
-        score: mockScore,
-        summary: `「演示模式」：${name} 先生/女士，此名与属${zodiac}契合度极高，乃祥瑞之象。`,
-        analysis: [
-          { icon: '📝', title: '字形分析', content: '此名字形平衡，结构稳健，寓意一生平稳顺遂。' },
-          { icon: '📖', title: '字义解读', content: '名字中蕴含着深厚的文化底蕴，展现了高雅的情操与远大的抱负。' },
-          { icon: '🔥', title: '五行属性', content: '五行相生相旺，能够有效补足命理所需的能量缺口。' },
-          { icon: '🐲', title: '属相相合', content: `与属相「${zodiac}」高度契合，能得生肖守护，万事如意。` },
-          { icon: '☯', title: '八卦方位', content: '占据九宫吉位，有助于事业开阔，家门兴旺。' },
-          { icon: '⭐', title: '星象命理', content: '星宿拱卫，命宫清明，预示着未来有着不可限量的发展潜力。' }
-        ]
-      });
+    // --- Switch to Mock Responses Branding (API Paused) ---
+    console.log(`Using Simulated Response for IP: ${ip}, Name: ${name}`);
+    
+    // Increment counts
+    if (!isIPPaid) {
+      dbData.requestCounts[ip] = count + 1;
+      dbData.dailyGlobalCount += 1;
+      saveDB();
     }
-    // ----------------------------------
 
-    const prompt = buildAnalysisPrompt(name, zodiac);
+    // Pick a random mock response
+    const randomIndex = Math.floor(Math.random() * mockResponses.length);
+    const baseResult = JSON.parse(JSON.stringify(mockResponses[randomIndex]));
+    
+    // Personalize the response
+    const result = {
+      ...baseResult,
+      summary: `「道名推演」：${name} 先生/女士，${baseResult.summary}`,
+      remainingTries: isIPPaid ? 999 : Math.max(0, FREE_LIMIT - (count + 1)),
+      isPaid: isIPPaid
+    };
 
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位精通中国传统命理学的大师，学贯易经、连山、归藏三易，深谙九宫八卦、五行生克、星象命理之道。你擅长从字形、字义、字音、五行属性等多个维度分析姓名，并结合十二生肖属相进行综合评判。
-
-请严格按照 JSON 格式返回分析结果，不要返回任何其他内容。JSON 格式如下：
-{
-  "score": 85,
-  "summary": "综合概述（一句话）",
-  "analysis": [
-    {
-      "icon": "☯",
-      "title": "分析维度名称",
-      "content": "具体分析内容"
-    }
-  ]
-}
-
-分析维度必须包含以下6项（顺序固定）：
-1. 字形分析（icon: 📝）— 从汉字结构、笔画、偏旁部首分析
-2. 字义解读（icon: 📖）— 从字的含义、典故、寓意分析
-3. 五行属性（icon: 🔥）— 分析姓名各字的五行属性及生克关系
-4. 属相相合（icon: 🐲）— 分析姓名与所属生肖的相合度
-5. 八卦方位（icon: ☯）— 从九宫八卦角度分析姓名的方位吉凶
-6. 星象命理（icon: ⭐）— 从易经、连山、归藏的角度综合论述
-
-score 为 0-100 的整数，表示姓名与属相的综合契合度。
-每项分析的 content 需要详细充实，至少3-4句话。`
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.75,
-        max_tokens: 3000,
-      }),
+    // Ensure zodiac personalization in specific items
+    result.analysis = result.analysis.map(item => {
+      if (item.title === '属相相合') {
+        return {
+          ...item,
+          content: `针对属相「${zodiac}」：${item.content}`
+        };
+      }
+      return item;
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('DeepSeek API error:', response.status, errorText);
-      return res.status(502).json({ error: 'AI 服务暂时不可用，请稍后再试' });
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return res.status(502).json({ error: 'AI 返回内容为空' });
-    }
-
-    // Parse JSON from response
-    const result = parseJsonResponse(content);
-    
-    // Tag the result with paid status
-    result.isPaid = isIPPaid;
-
-    // Increment count only for non-paid requests
-    if (!isIPPaid) {
-      requestCounts.set(ip, count + 1);
-    }
-    
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).json({ error: '服务器内部错误' });
@@ -162,62 +173,14 @@ app.post('/api/suggest-names', async (req, res) => {
       return res.status(400).json({ error: '请提供属相信息' });
     }
 
-    const prompt = buildSuggestionPrompt(name, zodiac);
+    // Provide mock suggestions
+    const suggestions = [
+      { name: `${name.charAt(0)}子墨`, reason: "字意深远，金水相生。" },
+      { name: `${name.charAt(0)}若虚`, reason: "大智若愚，道法自然。" },
+      { name: `${name.charAt(0)}承德`, reason: "厚德载物，基业常青。" }
+    ];
 
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位精通中国传统命理学的起名大师。请根据用户的属相和当前姓名，推荐更合适的名字。
-
-请严格按照 JSON 格式返回，不要返回任何其他内容：
-{
-  "suggestions": [
-    {
-      "name": "推荐的名字",
-      "reason": "推荐理由（包含五行、字义、属相相合度等分析）"
-    }
-  ]
-}
-
-请推荐 3-5 个名字，每个名字的理由需要包含：
-- 字义寓意
-- 五行属性与属相的相合度
-- 八卦方位的吉祥程度
-理由至少 2-3 句话，详细而有说服力。`
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.8,
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('DeepSeek API error:', response.status, errorText);
-      return res.status(502).json({ error: 'AI 服务暂时不可用' });
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return res.status(502).json({ error: 'AI 返回内容为空' });
-    }
-
-    const result = parseJsonResponse(content);
-    res.json(result);
+    res.json({ suggestions });
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).json({ error: '服务器内部错误' });
@@ -225,97 +188,42 @@ app.post('/api/suggest-names', async (req, res) => {
 });
 
 /**
+ * GET /api/check-limit
+ * Check remaining free tries for the current IP
+ */
+app.get('/api/check-limit', (req, res) => {
+  const ip = getClientIp(req);
+  const isIPPaid = dbData.paidIPs.includes(ip);
+  const count = dbData.requestCounts[ip] || 0;
+  
+  // Refresh global check
+  if (dbData.lastResetDate !== getTodayKey()) {
+    dbData.dailyGlobalCount = 0;
+    dbData.lastResetDate = getTodayKey();
+    saveDB();
+  }
+
+  res.json({
+    limit: FREE_LIMIT,
+    count: count,
+    remainingTries: isIPPaid ? 999 : Math.max(0, FREE_LIMIT - count),
+    isPaid: isIPPaid,
+    globalRemaining: Math.max(0, GLOBAL_DAILY_LIMIT - dbData.dailyGlobalCount)
+  });
+});
+
+/**
  * POST /api/unlock
  * Unlock the limit for the current IP (Simulated Payment)
  */
 app.post('/api/unlock', (req, res) => {
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  paidIPs.add(ip);
+  const ip = getClientIp(req);
+  if (!dbData.paidIPs.includes(ip)) {
+    dbData.paidIPs.push(ip);
+    saveDB();
+  }
   res.json({ success: true, message: '已成功解锁该 IP 的永久访问权限' });
 });
-
-/**
- * Build the analysis prompt
- */
-function buildAnalysisPrompt(name, zodiac) {
-  return `请详细分析以下姓名与属相的命理契合度：
-
-姓名：${name}
-属相：${zodiac}
-
-请从以下维度进行深入分析：
-1. 字形分析：分析「${name}」每个字的结构、笔画特征、偏旁部首的五行属性
-2. 字义解读：分析每个字的含义、文化典故、历史渊源
-3. 五行属性：分析姓名各字的五行（金木水火土）属性，以及与属相「${zodiac}」五行的生克关系
-4. 属相相合：分析「${name}」与生肖「${zodiac}」的命理相合度，是否存在冲克
-5. 八卦方位：从九宫八卦的角度，分析此姓名所处的卦位及吉凶
-6. 星象命理：综合易经、连山、归藏三易之理，论述此姓名的整体命理走势
-
-请给出 0-100 的综合评分，并提供一句话的总结概述。`;
-}
-
-/**
- * Build the name suggestion prompt
- */
-function buildSuggestionPrompt(name, zodiac) {
-  return `当前姓名为「${name}」，属相为「${zodiac}」。
-
-经分析，当前姓名可能存在与属相不够契合的情况。请根据以下原则推荐 3-5 个更合适的名字：
-
-1. 与属相「${zodiac}」的五行相合
-2. 字形优美，笔画调和
-3. 字义吉祥，寓意深远
-4. 符合九宫八卦的吉位
-5. 兼顾易经、连山、归藏之理
-
-请注意：
-- 保持姓氏「${name.charAt(0)}」不变
-- 推荐的名字应当典雅大方，具有中国传统文化底蕴
-- 每个名字都要详细说明推荐理由`;
-}
-
-/**
- * Parse JSON from LLM response (handles markdown code blocks)
- */
-function parseJsonResponse(content) {
-  try {
-    // Try direct parse
-    return JSON.parse(content);
-  } catch (e) {
-    // Try extracting from markdown code block
-    const match = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (match) {
-      try {
-        return JSON.parse(match[1]);
-      } catch (e2) {
-        console.error('Failed to parse extracted JSON:', e2);
-      }
-    }
-
-    // Fallback: try to find JSON object
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch (e3) {
-        console.error('Failed to parse found JSON:', e3);
-      }
-    }
-
-    // Return a fallback response
-    return {
-      score: 70,
-      summary: '分析完成',
-      analysis: [
-        {
-          icon: '📝',
-          title: '综合分析',
-          content: content,
-        },
-      ],
-    };
-  }
-}
 
 // SPA catch-all: serve index.html for all non-API routes
 app.get('*', (req, res) => {
@@ -325,8 +233,4 @@ app.get('*', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🏛️ 道名后端服务已启动: http://localhost:${PORT}`);
-  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY === 'your_key_here') {
-    console.warn('⚠️  请在 .env 文件中设置 DEEPSEEK_API_KEY');
-  }
 });
-

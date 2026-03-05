@@ -7,6 +7,7 @@ import { zodiacData } from './zodiac-data.js';
 
 let selectedZodiac = null;
 let isPaid = false; // 模拟付费状态
+let remainingTries = 2;
 
 export function renderNameAnalysis(container) {
   container.innerHTML = `
@@ -18,6 +19,8 @@ export function renderNameAnalysis(container) {
     <div class="page-section">
       <!-- Input Form -->
       <form class="analysis-form" id="name-form">
+        <div id="tries-container" style="text-align:center;"></div>
+        
         <div class="form-group">
           <label class="form-label">请输入姓名</label>
           <input
@@ -53,28 +56,77 @@ export function renderNameAnalysis(container) {
   `;
 
   initFormHandlers();
+  checkLimit(); // Initial limit check
+}
+
+/**
+ * 获取剩余次数
+ */
+async function checkLimit() {
+  try {
+    const response = await fetch('/api/check-limit');
+    if (response.ok) {
+      const data = await response.json();
+      remainingTries = data.remainingTries;
+      isPaid = data.isPaid;
+      updateTriesUI();
+    }
+  } catch (err) {
+    console.error('Failed to check limit:', err);
+  }
+}
+
+function updateTriesUI() {
+  const container = document.getElementById('tries-container');
+  if (!container) return;
+
+  if (isPaid) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const isLimit = remainingTries <= 0;
+  container.innerHTML = `
+    <div class="tries-badge ${isLimit ? 'tries-badge-limit' : ''}">
+      ${isLimit ? '免费次数已用完' : `剩余免费次数: ${remainingTries}`}
+    </div>
+  `;
 }
 
 /**
  * 显示次数上限提示
  */
-function showLimitExceeded(container) {
+function showLimitExceeded(container, isGlobal = false) {
+  const title = isGlobal ? '今日全站免费名额已满' : '免费测算次数已用完';
+  const desc = isGlobal 
+    ? '今日测算天机次数过多，全站免费名额已用完。如需继续深度解读，请支持我们的传承工作。' 
+    : '每个设备限两次免费测算。您已体验过道家命理推演的玄妙，如需继续深度解读，请支持我们的传承工作。';
+
   container.innerHTML = `
     <div class="paywall-banner fade-in" style="margin-top:0;">
       <div style="font-size:3rem; margin-bottom:var(--space-md);">☯</div>
-      <h3>免费测算次数已用完</h3>
-      <p>
-        每个设备限两次免费测算。您已体验过道家命理推演的玄妙，<br>
-        如需继续深度解读，请支持我们的传承工作。
-      </p>
-      <div class="paywall-price">
-        ¥ 39.9 <small>/ 永久解锁</small>
+      <h3>${title}</h3>
+      <p>${desc}</p>
+      
+      <div class="qr-container">
+        <div class="qr-price-badge">¥ 9.9 / 次</div>
+        <img src="/assets/wechat_pay_qr.jpg" class="qr-image" alt="微信支付二维码" />
+        <div class="qr-tips">
+          <strong>付款流程：</strong><br>
+          1. 截屏或长按保存二维码<br>
+          2. 使用微信「扫一扫」识别支付<br>
+          3. 支付成功后点击下方「我已支付」
+        </div>
       </div>
-      <button class="btn-gold" id="limit-pay-btn">
-        立即解锁 ✦
-      </button>
+
+      <div style="margin-top:var(--space-xl);">
+        <button class="btn-gold" id="limit-pay-btn">
+          我已支付 ✦
+        </button>
+      </div>
+      
       <p style="margin-top:var(--space-md); font-size:0.8rem; color:var(--color-ink-muted);">
-        * 演示模式：点击解锁后即可再次尝试
+        * 演示模式：点击按钮即可模拟支付成功
       </p>
     </div>
   `;
@@ -89,6 +141,9 @@ function showLimitExceeded(container) {
       await fetch('/api/unlock', { method: 'POST' });
       
       isPaid = true;
+      remainingTries = 999;
+      updateTriesUI();
+      
       alert('已成功模拟付费解锁！');
       // Hide results area so user can submit again
       const rs = document.getElementById('results-area');
@@ -141,27 +196,55 @@ async function analyzeName(name, zodiac) {
   submitBtn.disabled = true;
   submitBtn.textContent = '正在推演命理···';
   resultsArea.style.display = 'block';
+
+  // Deduction steps for the 10-second wait
+  const loadingSteps = [
+    '正在排布九宫八卦方位...',
+    '依据易经推演乾坤之德...',
+    '正在分析字形五行生克...',
+    '调取连山易、归藏易典籍...',
+    '深度解析属相天干地支契合度...',
+    '融合星象命理最终定稿...'
+  ];
+
   resultsArea.innerHTML = `
     <div class="loading-container">
       <div class="loading-spinner">☯</div>
-      <p class="loading-text">
+      <p class="loading-text" id="loading-step-text">
         正在依据星象、易经、九宫八卦推演<span class="loading-dots"></span>
       </p>
     </div>
   `;
 
+  // Start rotating loading text
+  let stepIndex = 0;
+  const stepInterval = setInterval(() => {
+    const textEl = document.getElementById('loading-step-text');
+    if (textEl) {
+      textEl.innerHTML = `${loadingSteps[stepIndex % loadingSteps.length]}<span class="loading-dots"></span>`;
+      stepIndex++;
+    }
+  }, 1600);
+
   // Scroll to results
   resultsArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  // Record start time
+  const startTime = Date.now();
+
   try {
+    // API call starts immediately
     const response = await fetch('/api/analyze-name', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, zodiac: zodiac.name }),
     });
 
+    // Check paywall
     if (response.status === 402) {
-       showLimitExceeded(resultsArea);
+       clearInterval(stepInterval);
+       const data = await response.json();
+       showLimitExceeded(resultsArea, data.globalLimitExceeded);
        return;
     }
 
@@ -170,10 +253,25 @@ async function analyzeName(name, zodiac) {
     }
 
     const data = await response.json();
+
+    // Ensure at least 10 seconds (10000ms) have passed
+    const elapsedTime = Date.now() - startTime;
+    const remainingWait = Math.max(0, 10000 - elapsedTime);
+    
+    await new Promise(resolve => setTimeout(resolve, remainingWait));
+    
+    // Stop loading text rotation
+    clearInterval(stepInterval);
+
     if (data.isPaid) isPaid = true;
+    if (data.remainingTries !== undefined) {
+      remainingTries = data.remainingTries;
+      updateTriesUI();
+    }
 
     renderResults(name, zodiac, data);
   } catch (error) {
+    clearInterval(stepInterval);
     console.error('Analysis error:', error);
     resultsArea.innerHTML = `
       <div class="loading-container">
@@ -256,14 +354,20 @@ function renderResults(name, zodiac, data) {
           包含完整的字形分析、五行详解、八卦方位解读、<br>
           属相相合度分析以及专属改名建议
         </p>
-        <div class="paywall-price">
-          ¥ 39.9 <small>/ 一次</small>
+        
+        <div class="qr-container">
+          <div class="qr-price-badge">¥ 9.9 / 次</div>
+          <img src="/assets/wechat_pay_qr.jpg" class="qr-image" alt="微信支付二维码" />
         </div>
-        <button class="btn-gold" id="pay-btn">
-          立即解锁 ✦
-        </button>
+
+        <div>
+          <button class="btn-gold" id="pay-btn">
+            我已支付 ✦
+          </button>
+        </div>
+        
         <p style="margin-top:var(--space-md); font-size:0.8rem; color:var(--color-ink-muted);">
-          * 当前为演示模式，点击即可模拟付费解锁
+          * 付款后点击按钮解锁。当前为演示模式，点击即可模拟解锁。
         </p>
       </div>
     ` : ''}
@@ -310,6 +414,8 @@ function renderResults(name, zodiac, data) {
       try {
         await fetch('/api/unlock', { method: 'POST' });
         isPaid = true;
+        remainingTries = 999;
+        updateTriesUI();
         // Reload with suggestions
         fetchSuggestionsAndRerender(name, zodiac, analysisItems, score, summary);
       } catch (err) {
